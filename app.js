@@ -6,8 +6,10 @@ const connectDB = require('./config/db.js');
 const authRoutes = require('./routes/authRoutes');
 const emailVerificationRoutes = require('./routes/emailVerificationRoutes');
 const eventRoutes = require('./routes/eventRoutes');
+const { connectRedis } = require('./utils/redisClient');
 
 connectDB();
+connectRedis();
 app.use(express.json());
 app.use('/auth', authRoutes);
 app.use('/verify-email', emailVerificationRoutes);

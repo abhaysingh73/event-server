@@ -1,4 +1,5 @@
 const Event = require('../models/Event');
+const { redisClient } = require('../utils/redisClient');
 const create_event = async (req, res) => {
     const {
         created_by_user_id,
@@ -49,8 +50,7 @@ const create_event = async (req, res) => {
 
 const get_events = async (req, res) => {
     try {
-        const { category, created_by_user_id, limit = 10, page = 1 } = req.query;
-
+        const { category, created_by_user_id, limit = 10, page = 1, use_cache = true } = req.query;
         let query = {};
         if (category) {
             query.event_category = category;
@@ -61,6 +61,14 @@ const get_events = async (req, res) => {
 
         const skip = (page - 1) * limit;
 
+        const cachekey = `events:${category || 'all'}:${created_by_user_id || 'all'}:${page}:${limit}`;
+        const cachedData = await redisClient.get(cachekey);
+        if (cachedData && use_cache == true) {
+            let cachedData_temp = JSON.parse(cachedData);
+            cachedData_temp.is_cached = true;
+            return res.status(200).json(cachedData_temp);
+        }
+
         const events = await Event.find(query)
             .skip(skip)
             .limit(Number(limit))
@@ -68,12 +76,17 @@ const get_events = async (req, res) => {
 
         const totalEvents = await Event.countDocuments(query);
 
-        res.status(200).json({
+        const responseData = {
             events,
             totalEvents,
             totalPages: Math.ceil(totalEvents / limit),
             currentPage: page,
-        });
+        }
+
+        redisClient.setEx(cachekey, 3600, JSON.stringify(responseData));
+
+        res.status(200).json(responseData);
+
     } catch (error) {
         console.error('Error fetching events:', error);
         res.status(500).json({ message: 'Internal Server Error' });
